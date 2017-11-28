@@ -1,0 +1,237 @@
+---
+output:
+  github_document:
+    html_preview: false
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, echo = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "README/README-"
+)
+```
+
+### EGFR feedback-inhibition by Ran-Binding Protein 6 is disrupted in cancer
+
+Barbara Oldrini‡, Wan-Ying Hsieh‡, Hediye Erdjument-Bromage, Paolo Codega, Maria Stella Carro, Alvaro Curiel-García2, Carl Campos, Maryam Pourmaleki, Christian Grommes, Igor Vivanco, Daniel Rohle, Craig M. Bielski, Barry S. Taylor, Travis J. Hollmann, Marc Rosenblum, Paul Tempst, John Blenis, 
+Massimo Squatrito, Ingo K. Mellinghoff. *Nature Communications* (in press)
+
+**Libraries to be installed and loaded**
+```{r, message = FALSE, , warning = FALSE}
+library("tidyverse")
+library("reshape2")
+library("scales")
+library("GOSemSim")
+library("clusterProfiler")
+library("cgdsr")
+library("gridExtra")
+library("GSEABase")
+library("GSVA")
+library("heatmap3")
+library("lattice")
+library("weights")
+```
+
+Gene Ontology, Figure 1a right.
+The gene ontology enrichment was performed using the Gene Ontology Consotrium website (www.geneontology.org), through the analysis tools from the PANTHER Classification System, by uploading the list of the Uniprot_IDs of the proteins identified in the mass spectrometry experiments. The enrichment results were then filtered to reduce the number of redundant GO classes, by using the “Clusterprofiler” and “GOSemSim”
+```{r, message=FALSE, warning=FALSE}
+# Load GO raw data
+TableS2_raw <- read_delim("data/raw/TableS2_raw.txt", "\t", escape_double = FALSE, trim_ws = TRUE, skip = 6)
+names(TableS2_raw) <- c("GO biological process complete","ref","observed","expected","(over/under)","Fold Enrichment","p.value")
+TableS2_raw$ID <- apply(TableS2_raw[,1],MARGIN = 1, FUN = function (x) {gsub(".*\\((.*)\\).*", "\\1",x)})
+
+# simplify GO
+EGFR_go_BP <- new("enrichResult", ontology='BP', result = TableS2_raw) %>% 
+  simplify(cutoff = 0.7, by="Fold Enrichment", select_fun=max)
+Table_S2 <- EGFR_go_BP@result
+Table_S2 %>% 
+  .[-which(duplicated(.[,2:6])), ] %>% # filter outduplicated categories  
+  .[1:10, ] %>% # select only the first 10 categories
+  ggplot(aes(x = reorder(`GO biological process complete`, `Fold Enrichment`), 
+             y = log2(`Fold Enrichment`), size = `observed`, color=`p.value`)) + 
+  geom_point() + scale_color_gradient(low="red", high="blue") + labs(y = "log2 Fold Enrichment", x ="") +
+  coord_flip() + theme_bw() +
+  theme(axis.text.x = element_text(colour = "black", size = 8, vjust =1 ),
+        axis.text.y = element_text(colour = "black", size = 8, hjust =1 ),
+        axis.title = element_text(margin = margin(10, 5, 0, 0), color = "black", size = 8),
+        axis.title.y = element_text(angle = 90)
+  )
+```
+
+Microarray analysis, Figure 3d
+```{r, message=FALSE, warning=FALSE, fig.width = 6.5, fig.height = 4.5}
+# Load expression data analysis (see below)
+exprs.data <- read.delim("data/processed/293T_BP6_expression_data.txt", stringsAsFactors = F)
+
+## Alternatively, analize the Affymetrix CEL files
+# require("affy")
+# require("annaffy")
+# require("hgu133plus2.db")
+# files <- list.files("data/raw/")
+# files.1 <- grep(".CEL", files, value=TRUE)
+# cel <- ReadAffy(filenames=files.1)
+# normExprs <- expresso(cel, bgcorrect.method = 'rma',
+# normalize.method = 'quantiles',
+# pmcorrect.method = 'pmonly',
+# summary.method = 'medianpolish')
+# exprs.data <- exprs(normExprs)
+# probes.to.symbols <- function(probes, chip) {
+#   symbols <- sapply(aafSymbol(probes, chip), function (x) { ifelse (length (x!=0), x, NA) } )
+#   names(symbols) <- probes
+#   return(symbols)
+# }
+# gene.names <- probes.to.symbols(rownames (exprs.data), "hgu133plus2.db")
+# aggregate.data <- aggregate(exprs.data, by=list (gene.names), FUN = median)
+# rownames (aggregate.data) <- aggregate.data[[1]]
+# aggregate.data <- aggregate.data[,-1]
+# exprs.data <- round(aggregate.data, digits = 4)
+# rm(aggregate.data,cel,files,files.1,gene.names,normExprs)
+# names(exprs.data) <- sub(".CEL","", names(exprs.data))
+# names(exprs.data) <- sub("^293T-","", names(exprs.data))
+
+#Perform ssGSEA analysis on STAT3 gene lists
+stat3_gene_list <- getBroadSets(asBroadUri(c("DAUER_STAT3_TARGETS_DN","DAUER_STAT3_TARGETS_UP",
+                                             "AZARE_STAT3_TARGETS","HALLMARK_IL6_JAK_STAT3_SIGNALING",
+                                             "STAT3_01","STAT3_02"), 
+                                           base='http://software.broadinstitute.org/gsea/msigdb/cards'))
+stat3_gene_list <- geneIds(stat3_gene_list)
+gsva_results <- gsva(expr = as.matrix(exprs.data), gset.idx.list = stat3_gene_list, verbose= FALSE,
+                     method="ssgsea", rnaseq=FALSE, min.sz=15, max.sz=10000, parallel.sz = 20)
+col <- c("gray","gray","gray","black","black","black")
+pv.list <- apply(gsva_results,1,function(x){t.test(x[1:3],x[4:6])$p.value})
+
+# Plot heatmap
+heatmap3(gsva_results, Rowv = NA, margins = c(2,10), cexRow = 1, cexCol = 0.8, ColSideColors = col, ColSideLabs ="",labCol=NA)
+legend(0.7, 1, legend = c("-Dox","+Dox"), fill = c("gray","black"), 
+       border = FALSE, bty = "n", y.intersp = 1, cex = 0.8, title = "RANBP6 shRNA")
+# Summary statistic
+pv.list
+```
+
+CCLE EGFR-RANBP6 mRNA correlation
+```{r}
+# Download CCLE data from the cBio Portal
+mycgds = CGDS("http://www.cbioportal.org/public-portal/")
+df.EGFR.ccle <- getProfileData(mycgds, "EGFR", "cellline_ccle_broad_mrna_median_Zscores",
+                               "cellline_ccle_broad_3way_complete")
+colnames(df.EGFR.ccle) <- "EGFR_mRNA_Zscores"
+df.RANBP6.ccle <- getProfileData(mycgds, "RANBP6", "cellline_ccle_broad_mrna_median_Zscores",
+                                 "cellline_ccle_broad_3way_complete")
+colnames(df.RANBP6.ccle) <- "RANBP6_mRNA_Zscores"
+df.PTEN.ccle <- getProfileData(mycgds, "PTEN", c("cellline_ccle_broad_CNA", "cellline_ccle_broad_mutations"),
+                               "cellline_ccle_broad_3way_complete")
+colnames(df.PTEN.ccle) <- c("PTEN_gistic", "PTEN_mut")
+df.PTEN.ccle$PTEN_gistic <- as.numeric(as.character(df.PTEN.ccle$PTEN_gistic))# there is an issue with the gistic data when downloaded with mut data
+df.ccle <- cbind(df.EGFR.ccle, df.RANBP6.ccle, df.PTEN.ccle)
+rm(df.EGFR.ccle, df.RANBP6.ccle,df.PTEN.ccle)
+df.ccle$PTEN_status <- ifelse(!is.na(df.ccle$PTEN_mut), "PTEN altered", "PTEN intact")
+df.ccle$PTEN_status <- ifelse(df.ccle$PTEN_gistic == -2,"PTEN altered", df.ccle$PTEN_status)
+df.ccle$PTEN_status <- factor(df.ccle$PTEN_status, levels = c("PTEN intact","PTEN altered"))
+
+# CCLE EGFR-RANBP6 mRNA correlation
+p1 <- xyplot(EGFR_mRNA_Zscores ~ RANBP6_mRNA_Zscores, data = df.ccle, pch = 20, ylim = c(-2, 5.5),
+             xlab = "RANBP6 mRNA (Z-score)", ylab = "EGFR mRNA (Z-score)", type = c("p", "r"), alpha = 0.5, col = "black",
+             scales = list(tck = c(1, 0)),
+             panel = function (x,y,...){
+               panel.xyplot(x,y,...)
+               cor <- cor.test(x,y)
+               panel.text (2, 5.25, cex = 1, paste("r =",round(cor$estimate, digits = 3),";",
+                                                   "p value =",signif(cor$p.value, digits = 2)))
+             })
+
+# CCLE EGFR-RANBP6 mRNA correlation, separated by PTEN status 
+p2 <- xyplot(EGFR_mRNA_Zscores~RANBP6_mRNA_Zscores | PTEN_status, data = df.ccle, pch = 20,
+             scales = list( y = list(relation = "free")),  
+             ylim = c(-2, 5.5), xlab = "RANBP6 mRNA (Z-score)", ylab = "EGFR mRNA (Z-score)", 
+             type = c("p", "r"), alpha = 0.5, col = "black",
+             panel = function(x,y,...){
+               panel.xyplot(x,y,...)
+               cor <- cor.test(x,y)
+               n <- length(x)
+               panel.text (0.5, 5.25, cex = 1, paste("N =",n,";","r =",round(cor$estimate, digits = 3),";",
+                                                     "p value =",signif(cor$p.value, digits = 2)))
+             })
+```
+
+Figure 5e 
+```{r, echo=FALSE, fig.width = 10, fig.height=4.25}
+grid.arrange(p1, p2, ncol = 2)
+```
+
+
+GBM expression data
+Expression data were downloaded at: gliovis.bioinfo.cnio.es
+```{r, message=FALSE, warning=FALSE}
+Table_S8 <- readxl::read_excel("~/oldrini2017/data/processed/Table S8.xlsx", 
+    col_types = c("text", "text", "numeric", 
+        "numeric", "text", "numeric", "text", 
+        "blank", "blank"), skip = 1) %>%
+  mutate(Histology = factor(Histology, levels = c("Non-tumor", "GBM")),
+         Subtype = factor(Subtype, levels = c("Classical","Mesenchymal","Proneural")),
+         RANBP6_GISTIC = factor(RANBP6_GISTIC, levels = c(-2:2), labels = c("Homdel", "Hetloss", "Diploid", "Gain", "Amp")),
+         RANBP6_GISTIC = droplevels(RANBP6_GISTIC),
+         Dataset = factor(Dataset, levels = c("TCGA", "Rembrandt")))
+```
+
+Figure 6b 
+```{r, warning = FALSE, fig.width = 4, fig.height = 3}
+Table_S8 %>%
+  filter(Dataset == "TCGA" & RANBP6_GISTIC != is.na(RANBP6_GISTIC)) %>%
+  ggplot(aes(x = RANBP6_GISTIC, y = `RANBP6_mRNA (RNAseq)`)) +
+  geom_boxplot(outlier.size = 0, outlier.stroke = 0) +
+  geom_jitter(position = position_jitter(width = .25), alpha = 0.8) + theme_bw() +
+  ylab("RANBP6 mRNA(log2)") + xlab("Copy number (GISTIC)")
+```
+
+Supplementary Figure 6
+```{r, warning = FALSE, fig.width = 4, fig.height = 3}
+table(Table_S8$Subtype, Table_S8$RANBP6_GISTIC) %>%
+  prop.table(., 1) %>% 
+  melt(., varnames = c("Subtype", "RANBP6_GISTIC"), id.vars = "Subtype") %>% 
+  mutate(value = value*100) %>% 
+  ggplot(aes(x = Subtype, y = value, fill = RANBP6_GISTIC)) +
+  geom_bar(stat = "identity") + scale_fill_brewer(palette = "Set1") +
+  labs(x = "Subtype", y = "% of tumors") + 
+  theme_bw()
+```
+
+Supplementary Figure 7
+```{r, warning = FALSE, fig.width = 4, fig.height = 3}
+Table_S8 %>%
+  ggplot(aes(x = Histology, y = `RANBP6_mRNA (Affimetrix)`)) + ylab("RANBP6 mRNA (log2)") +
+  geom_boxplot(aes(fill = Histology),outlier.size = 0, outlier.stroke = 0) +
+  facet_wrap(~Dataset, scales = "free_y",ncol = 2) +
+  theme_linedraw()
+table(Table_S8$Dataset,Table_S8$Histology)
+```
+
+Figure 6f 
+```{r, warning = FALSE, fig.width = 4, fig.height = 3}
+readxl::read_excel("data/raw/Figure6f_data.xlsx", col_types = c("text", "numeric", "numeric", "text")) %>%
+  mutate(treatment = factor(treatment,levels = c("Mock","Dox")), day = factor(day)) %>% 
+  filter(day %in% c(0,8,16)) %>% 
+  ggplot(aes(x = day, y = volume, fill = treatment)) + 
+  geom_boxplot(outlier.shape = NA) + scale_fill_manual(values = c("black","red")) +
+  theme_bw()
+```
+Figure 6h 
+```{r, warning = FALSE, message = FALSE, fig.width = 4, fig.height = 3}
+Figure6g_data <- read_csv("data/raw/Figure6g_data.csv")
+table(Figure6g_data$Grade, Figure6g_data$shRNA) %>%
+  melt(., varnames = c("Grade", "shRNA"), id.vars = "Grade") %>%
+  ggplot(., aes(x = shRNA, y = value, fill = forcats::fct_rev(Grade))) +
+  geom_bar(position = "fill", stat = "identity") +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_grey(start = 0, end = .9) +
+  labs(x = "", y = "% of tumors") +  
+  guides(fill=guide_legend(title="Glioma \n grade (WHO)")) +
+  theme_bw()
+```
+
+Session info
+```{r, echo=FALSE}
+devtools::session_info()
+```
