@@ -2,7 +2,7 @@
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 ### EGFR feedback-inhibition by Ran-Binding Protein 6 is disrupted in cancer
 
-Barbara Oldrini‡, Wan-Ying Hsieh‡, Hediye Erdjument-Bromage, Paolo Codega, Maria Stella Carro, Alvaro Curiel-García2, Carl Campos, Maryam Pourmaleki, Christian Grommes, Igor Vivanco, Daniel Rohle, Craig M. Bielski, Barry S. Taylor, Travis J. Hollmann, Marc Rosenblum, Paul Tempst, John Blenis, Massimo Squatrito, Ingo K. Mellinghoff. *Nature Communications* (in press)
+Barbara Oldrini‡, Wan-Ying Hsieh‡, Hediye Erdjument-Bromage, Paolo Codega, Maria Stella Carro, Alvaro Curiel-García2, Carl Campos, Maryam Pourmaleki, Christian Grommes, Igor Vivanco, Daniel Rohle, Craig M. Bielski, Barry S. Taylor, Travis J. Hollmann, Marc Rosenblum, Paul Tempst, John Blenis, Massimo Squatrito, Ingo K. Mellinghoff. [*Nature Communications*] (https://www.nature.com/articles/s41467-017-02185-w.pdf)
 
 **Libraries to be installed and loaded**
 
